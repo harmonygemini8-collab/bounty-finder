@@ -42,6 +42,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Drop bounties whose repo has fewer than this many stars.",
     )
     p.add_argument(
+        "--max-age-days", type=int, default=0, metavar="DAYS",
+        help="Only keep bounties opened within the last N days (0 = no limit). "
+             "Great for catching FRESH bounties before the crowd piles on.",
+    )
+    p.add_argument(
+        "--max-attempts", type=int, default=-1, metavar="N",
+        help="With --deep: drop issues that already have more than N "
+             "claimants/attempt PRs (e.g. 0 = only untouched bounties).",
+    )
+    p.add_argument(
+        "--sort", choices=["worth", "fresh"], default="worth",
+        help="Order results by worth score (default) or by freshness (newest first).",
+    )
+    p.add_argument(
         "--lang", action="append", default=[], metavar="LANGUAGE",
         help="Preferred repo language; repeatable (e.g. --lang Python --lang Go).",
     )
@@ -135,6 +149,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.min_stars > 0:
         bounties = [b for b in bounties if (b.stars or 0) >= args.min_stars]
 
+    if args.max_age_days > 0:
+        bounties = [
+            b for b in bounties
+            if b.age_days is not None and b.age_days <= args.max_age_days
+        ]
+
     config = ScoreConfig(weights=_weights(args), preferred_languages=args.lang)
     ranked = rank(bounties, config)
 
@@ -149,9 +169,21 @@ def main(argv: list[str] | None = None) -> int:
     if args.min_amount > 0:
         ranked = [b for b in ranked if b.amount_usd >= args.min_amount]
 
+    if args.sort == "fresh":
+        ranked.sort(
+            key=lambda b: b.created_at.timestamp() if b.created_at else 0, reverse=True
+        )
+
     if args.deep > 0:
         candidates = [b for b in ranked if b.source == "github"][: args.deep]
         analyses = analyze_many(gh, candidates)
+        if args.max_attempts >= 0:
+            analyses = [a for a in analyses if a.attempts <= args.max_attempts]
+        if args.sort == "fresh":
+            analyses.sort(
+                key=lambda a: a.bounty.created_at.timestamp() if a.bounty.created_at else 0,
+                reverse=True,
+            )
         deep_renderers = {
             "console": analyses_to_console,
             "markdown": analyses_to_markdown,
@@ -159,6 +191,11 @@ def main(argv: list[str] | None = None) -> int:
         }
         text = deep_renderers[args.format](analyses, args.top)
     else:
+        if args.max_attempts >= 0:
+            print(
+                "note: --max-attempts requires --deep to count attempts; ignoring.",
+                file=sys.stderr,
+            )
         renderers = {"console": to_console, "markdown": to_markdown, "json": to_json}
         text = renderers[args.format](ranked, args.top)
 

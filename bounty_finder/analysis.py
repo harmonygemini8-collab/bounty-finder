@@ -63,6 +63,7 @@ class Analysis:
     openness: float = 0.0  # 1 = wide open, 0 = crowded/taken
     finishability: float = 0.0
     maintainer: float = 0.0
+    attempts: int = 0  # people who claimed/attempted (competition headcount)
     effort: str = "Unknown"  # Small / Medium / Large / Unknown
     platforms: list[str] = field(default_factory=list)
     reasons: list[str] = field(default_factory=list)
@@ -214,6 +215,7 @@ class DeepAnalyzer:
             )
 
         a.openness = max(0.0, min(1.0, score))
+        a.attempts = max(total_attempts, len(open_prs) + len(closed_prs))
         a.signals["open_prs"] = len(open_prs)
         a.signals["closed_prs"] = len(closed_prs)
         a.signals["merged_prs"] = len(merged)

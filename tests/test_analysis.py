@@ -114,4 +114,11 @@ def test_closed_attempt_prs_flag_graveyard():
     gh = FakeGH(repo={"stars": 9000, "pushed_at": datetime.now(timezone.utc)}, prs=prs)
     a = DeepAnalyzer(gh).analyze(_bounty())
     assert a.signals["closed_prs"] == 5
+    assert a.attempts == 5
     assert any("closed WITHOUT merge" in f for f in a.red_flags)
+
+
+def test_untouched_bounty_has_zero_attempts():
+    gh = FakeGH(repo={"stars": 3000, "pushed_at": datetime.now(timezone.utc)})
+    a = DeepAnalyzer(gh).analyze(_bounty())
+    assert a.attempts == 0

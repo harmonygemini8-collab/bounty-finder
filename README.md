@@ -40,6 +40,9 @@ GitHub's low unauthenticated search rate.
 # Curated crawl: only high-star OSS projects that actually pay, deep-analyzed
 bounty-finder --curated --min-stars 500 --deep 15 --format markdown -o report.md
 
+# The winnable niche: FRESH bounties (<21 days) with 0 attempts yet — get in early
+bounty-finder --curated --max-age-days 21 --sort fresh --deep 25 --max-attempts 0
+
 # Top 15 bounties across GitHub, refined for the top 10
 bounty-finder
 
