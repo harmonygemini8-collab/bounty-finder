@@ -81,3 +81,94 @@ def to_json(bounties: list[Bounty], top: int) -> str:
 
 def _escape(text: str) -> str:
     return text.replace("|", "\\|").replace("\n", " ")
+
+
+# --------------------------------------------------------------------------
+# Deep-analysis rendering
+# --------------------------------------------------------------------------
+_VERDICT_ICON = {"RECOMMEND": "✅", "WATCH": "🟡", "AVOID": "⛔"}
+
+
+def analyses_to_console(analyses, top: int) -> str:
+    rows = analyses[:top]
+    if not rows:
+        return "No bounties to analyze."
+    out = []
+    for i, a in enumerate(rows, 1):
+        b = a.bounty
+        icon = _VERDICT_ICON.get(a.verdict, "")
+        out.append(
+            f"{i}. {icon} {a.verdict}  worth={a.worth_score:<5} {_fmt_amount(b.amount_usd)}  "
+            f"{b.repo}#{b.number}"
+        )
+        out.append(f"   {b.title}")
+        out.append(f"   {b.url}")
+        out.append(
+            f"   legit={a.legitimacy:.2f} open={a.openness:.2f} "
+            f"finishable={a.finishability:.2f} maintainer={a.maintainer:.2f}"
+        )
+        for r in a.reasons:
+            out.append(f"   + {r}")
+        for f in a.red_flags:
+            out.append(f"   - {f}")
+        out.append("")
+    return "\n".join(out).rstrip()
+
+
+def analyses_to_markdown(analyses, top: int) -> str:
+    rows = analyses[:top]
+    out = [
+        "# Bounty deep-analysis",
+        "",
+        f"_Generated {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')} · "
+        f"{len(rows)} analyzed (read-only; verify before claiming)._",
+        "",
+        "| # | Verdict | Worth | Amount | Legit | Open | Finish | Maint. | Issue |",
+        "|--:|:--------|------:|-------:|------:|-----:|-------:|-------:|:------|",
+    ]
+    for i, a in enumerate(rows, 1):
+        b = a.bounty
+        icon = _VERDICT_ICON.get(a.verdict, "")
+        out.append(
+            f"| {i} | {icon} {a.verdict} | {a.worth_score} | {_fmt_amount(b.amount_usd)} | "
+            f"{a.legitimacy:.2f} | {a.openness:.2f} | {a.finishability:.2f} | "
+            f"{a.maintainer:.2f} | [{b.repo}#{b.number}]({b.url})<br>{_escape(b.title)} |"
+        )
+    out += ["", "## Details", ""]
+    for i, a in enumerate(rows, 1):
+        b = a.bounty
+        icon = _VERDICT_ICON.get(a.verdict, "")
+        platforms = ", ".join(a.platforms) if a.platforms else "none detected"
+        out.append(f"### {i}. {icon} {a.verdict} — [{b.repo}#{b.number}]({b.url})")
+        out.append("")
+        out.append(f"**{_escape(b.title)}** · {_fmt_amount(b.amount_usd)} · platform: {platforms}")
+        out.append("")
+        if a.reasons:
+            out.append("**Reasons to do it**")
+            out += [f"- {r}" for r in a.reasons]
+            out.append("")
+        if a.red_flags:
+            out.append("**Red flags / caveats**")
+            out += [f"- {f}" for f in a.red_flags]
+            out.append("")
+    out += [
+        "---",
+        "",
+        "**Reminder:** this is a decision aid. Read the issue yourself, confirm "
+        "the approach with the maintainer, and only claim what you will deliver.",
+    ]
+    return "\n".join(out)
+
+
+def analyses_to_json(analyses, top: int) -> str:
+    def _default(o):
+        if isinstance(o, datetime):
+            return o.isoformat()
+        return str(o)
+
+    payload = []
+    for a in analyses[:top]:
+        d = asdict(a)
+        # Bounty is nested; asdict already expanded it.
+        payload.append(d)
+    return json.dumps(payload, default=_default, indent=2)

@@ -187,6 +187,69 @@ class GitHubSource:
         except requests.HTTPError:
             bounty.linked_pr_count = 0
 
+    # -- deep-analysis fetchers ---------------------------------------------
+    def repo_stats(self, repo: str) -> dict:
+        """Return repo metadata used to gauge legitimacy and activity."""
+
+        try:
+            d = self._get(f"/repos/{repo}")
+        except requests.HTTPError:
+            return {}
+        return {
+            "stars": d.get("stargazers_count", 0),
+            "forks": d.get("forks_count", 0),
+            "open_issues": d.get("open_issues_count", 0),
+            "archived": bool(d.get("archived")),
+            "fork": bool(d.get("fork")),
+            "pushed_at": _dt(d.get("pushed_at")),
+            "created_at": _dt(d.get("created_at")),
+            "language": d.get("language"),
+            "owner_type": (d.get("owner") or {}).get("type"),
+            "description": d.get("description") or "",
+        }
+
+    def issue_comments(self, repo: str, number: int, max_comments: int = 100) -> list[dict]:
+        try:
+            data = self._get(
+                f"/repos/{repo}/issues/{number}/comments", {"per_page": max_comments}
+            )
+        except requests.HTTPError:
+            return []
+        return data if isinstance(data, list) else []
+
+    def linked_prs(self, repo: str, number: int) -> list[dict]:
+        """Return PRs cross-referenced from the issue timeline.
+
+        Each item: {"number", "state" ("open"/"closed"), "merged" (bool),
+        "author"}. This is the strongest "is someone already solving it / is it
+        already solved" signal.
+        """
+
+        try:
+            events = self._get(
+                f"/repos/{repo}/issues/{number}/timeline", {"per_page": 100}
+            )
+        except requests.HTTPError:
+            return []
+        prs: dict[int, dict] = {}
+        for ev in events if isinstance(events, list) else []:
+            if ev.get("event") != "cross-referenced":
+                continue
+            src = (ev.get("source") or {}).get("issue") or {}
+            if "pull_request" not in src:
+                continue
+            pr_meta = src["pull_request"] or {}
+            num = src.get("number")
+            if num is None:
+                continue
+            prs[num] = {
+                "number": num,
+                "state": src.get("state", "open"),
+                "merged": bool(pr_meta.get("merged_at")),
+                "author": (src.get("user") or {}).get("login", ""),
+            }
+        return list(prs.values())
+
 
 def _dt(value: Optional[str]) -> Optional[datetime]:
     if not value:

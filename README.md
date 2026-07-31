@@ -58,6 +58,35 @@ Run `bounty-finder --help` for all flags.
 column flags issues as `open` / `busy` / `HOT (crowded)` based on assignees,
 linked PRs, and comment volume.
 
+### Deep analysis (`--deep N`)
+
+The plain ranking is a fast first pass. `--deep N` then investigates the top
+`N` candidates and returns a **verdict** — `RECOMMEND` / `WATCH` / `AVOID` —
+with written reasons and red flags, so you know *why* an issue is (or isn't)
+worth your time:
+
+```bash
+# Deep-analyze the top 8 bounties over $100
+bounty-finder --min-amount 100 --deep 8 --format markdown -o report.md
+
+# Deep-dive a specific repo's bounties
+bounty-finder --qualifiers "repo:microg/GmsCore" --deep 5
+```
+
+For each issue it fetches repo stats, the full comment thread, and the issue
+timeline, then judges four things:
+
+| Signal | What it checks |
+|--------|----------------|
+| **legitimacy** | escrow platform link (Algora/BountyHub/Polar/…), repo stars/age, archived/fork, "bounty-farm" repo detection |
+| **openness** | assignees, **merged** linked PRs (already solved), open competing PRs, people who publicly claimed it |
+| **finishability** | labels (good-first-issue vs epic), presence of acceptance criteria, body length |
+| **maintainer** | repo push recency, whether a maintainer is participating in the thread |
+
+A merged linked PR or failing legitimacy forces `AVOID`. In practice, most
+issues carrying a generic `bounty` label turn out to be `AVOID` (farms,
+already-solved, or swarmed) — which is exactly why this step matters.
+
 ## How scoring works
 
 Each issue gets a 0–100 score combining five normalized components with

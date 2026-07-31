@@ -5,7 +5,15 @@ from __future__ import annotations
 import argparse
 import sys
 
-from .report import to_console, to_json, to_markdown
+from .analysis import analyze_many
+from .report import (
+    analyses_to_console,
+    analyses_to_json,
+    analyses_to_markdown,
+    to_console,
+    to_json,
+    to_markdown,
+)
 from .scoring import ScoreConfig, ScoreWeights, rank
 from .sources.algora import AlgoraSource
 from .sources.github import DEFAULT_LABEL_QUERIES, GitHubSource
@@ -48,6 +56,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--enrich", type=int, default=10, metavar="N",
         help="Refine amount + competition for the top N via extra API calls "
              "(default: 10; 0 to disable).",
+    )
+    p.add_argument(
+        "--deep", type=int, default=0, metavar="N",
+        help="Run DEEP analysis on the top N candidates (legitimacy, competition, "
+             "finishability, maintainer responsiveness) and output verdicts "
+             "instead of the plain ranking. Costs ~3 API calls per issue.",
     )
     p.add_argument(
         "--algora-org", default=None,
@@ -114,13 +128,23 @@ def main(argv: list[str] | None = None) -> int:
     if args.min_amount > 0:
         ranked = [b for b in ranked if b.amount_usd >= args.min_amount]
 
-    renderers = {"console": to_console, "markdown": to_markdown, "json": to_json}
-    text = renderers[args.format](ranked, args.top)
+    if args.deep > 0:
+        candidates = [b for b in ranked if b.source == "github"][: args.deep]
+        analyses = analyze_many(gh, candidates)
+        deep_renderers = {
+            "console": analyses_to_console,
+            "markdown": analyses_to_markdown,
+            "json": analyses_to_json,
+        }
+        text = deep_renderers[args.format](analyses, args.top)
+    else:
+        renderers = {"console": to_console, "markdown": to_markdown, "json": to_json}
+        text = renderers[args.format](ranked, args.top)
 
     if args.output:
         with open(args.output, "w", encoding="utf-8") as fh:
             fh.write(text + "\n")
-        print(f"Wrote {min(len(ranked), args.top)} candidates to {args.output}")
+        print(f"Wrote output to {args.output}")
     else:
         print(text)
     return 0
