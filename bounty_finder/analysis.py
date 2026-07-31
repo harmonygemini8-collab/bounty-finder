@@ -38,10 +38,16 @@ _PLATFORM_PATTERNS = {
 _FARM_NAME_RE = re.compile(r"bounty|bounties|reward|airdrop|faucet|farm", re.I)
 
 _CLAIM_RE = re.compile(
-    r"\b(i(?:'| a)?m\s+(?:working|on it)|working on this|can i (?:be assigned|take|work)|"
-    r"i(?:'| woul)d like to (?:work|take)|assign(?:ed)? to me|/attempt|i'll take)\b",
+    r"(/attempt\b|/claim\b|\bi(?:'| a)?m\s+(?:working|on it)\b|\bworking on this\b|"
+    r"\bcan i (?:be assigned|take|work)\b|\bi(?:'| woul)d like to (?:work|take)\b|"
+    r"\bassign(?:ed)? to me\b|\bi'll take\b)",
     re.I,
 )
+
+# Algora posts an "attempts" table in a single bot comment; each active
+# attempt row is rendered like "🟢 @username". Counting these is the most
+# reliable competition signal for Algora-hosted bounties.
+_ATTEMPT_ROW_RE = re.compile(r"🟢\s*@([A-Za-z0-9_-]+)")
 _ACCEPTANCE_RE = re.compile(
     r"acceptance criteria|steps to reproduce|expected behavior|- \[ \]|definition of done",
     re.I,
@@ -158,6 +164,7 @@ class DeepAnalyzer:
         score = 1.0
         merged = [p for p in prs if p["merged"]]
         open_prs = [p for p in prs if p["state"] == "open" and not p["merged"]]
+        closed_prs = [p for p in prs if p["state"] == "closed" and not p["merged"]]
 
         if merged:
             score = 0.0
@@ -174,24 +181,44 @@ class DeepAnalyzer:
             score -= 0.4
             a.red_flags.append(f"Already assigned to {', '.join(b.assignees)}")
 
-        claims = 0
-        claimants = set()
+        # Count distinct people who claimed/attempted: individual claim comments
+        # plus the Algora attempts table (one bot comment listing many rows).
+        claimants: set[str] = set()
+        attempt_rows: set[str] = set()
         for c in comments:
             author = (c.get("user") or {}).get("login", "")
-            if "bot" in author.lower():
+            body = c.get("body") or ""
+            attempt_rows.update(_ATTEMPT_ROW_RE.findall(body))
+            if "bot" in author.lower() or "algora" in author.lower():
                 continue
-            if _CLAIM_RE.search(c.get("body") or ""):
-                claims += 1
+            if _CLAIM_RE.search(body):
                 claimants.add(author)
-        if claimants:
-            score -= min(len(claimants), 5) * 0.12
-            a.red_flags.append(f"{len(claimants)} people have publicly claimed/attempted it")
+        total_attempts = len(claimants | attempt_rows)
+
+        if total_attempts:
+            score -= min(total_attempts, 10) * 0.15
+            a.red_flags.append(
+                f"{total_attempts} people have publicly claimed/attempted it"
+            )
+
+        # "Graveyard" pattern: many attempt PRs, none merged -> very hard to land.
+        if closed_prs and not merged:
+            score -= min(len(closed_prs), 10) * 0.1
+            a.red_flags.append(
+                f"{len(closed_prs)} previous attempt PR(s) were closed WITHOUT merge "
+                "— maintainer is selective / issue is hard to land"
+            )
+        if total_attempts >= 8 and not merged:
+            a.red_flags.append(
+                "Heavily contested bounty graveyard — many tried, none succeeded"
+            )
 
         a.openness = max(0.0, min(1.0, score))
         a.signals["open_prs"] = len(open_prs)
+        a.signals["closed_prs"] = len(closed_prs)
         a.signals["merged_prs"] = len(merged)
-        a.signals["claimants"] = len(claimants)
-        if a.openness >= 0.8 and not merged:
+        a.signals["claimants"] = total_attempts
+        if a.openness >= 0.8 and not merged and total_attempts == 0:
             a.reasons.append("Field looks open — no assignee, no competing PRs")
 
     def _finishability(self, a: Analysis, repo: dict) -> None:

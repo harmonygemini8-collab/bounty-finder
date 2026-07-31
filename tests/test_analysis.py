@@ -95,3 +95,23 @@ def test_claim_comments_reduce_openness():
     a = DeepAnalyzer(gh).analyze(_bounty())
     assert a.signals["claimants"] == 3
     assert a.openness < 1.0
+
+
+def test_algora_attempt_table_counts_as_competition():
+    # A single Algora bot comment listing many attempt rows.
+    table = "## bounty\n" + "\n".join(f"| 🟢 @user{i} | date | WIP |" for i in range(12))
+    comments = [{"user": {"login": "algora-pbc"}, "body": table}]
+    gh = FakeGH(repo={"stars": 20000, "pushed_at": datetime.now(timezone.utc)}, comments=comments)
+    a = DeepAnalyzer(gh).analyze(_bounty(amount_usd=200, body="https://algora.io/x"))
+    assert a.signals["claimants"] == 12
+    assert a.openness < 0.3
+    assert a.verdict == "AVOID"
+    assert any("graveyard" in f.lower() for f in a.red_flags)
+
+
+def test_closed_attempt_prs_flag_graveyard():
+    prs = [{"number": n, "state": "closed", "merged": False, "author": "x"} for n in range(5)]
+    gh = FakeGH(repo={"stars": 9000, "pushed_at": datetime.now(timezone.utc)}, prs=prs)
+    a = DeepAnalyzer(gh).analyze(_bounty())
+    assert a.signals["closed_prs"] == 5
+    assert any("closed WITHOUT merge" in f for f in a.red_flags)
