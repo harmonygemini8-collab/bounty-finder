@@ -1,5 +1,7 @@
 # bounty-finder — Developer Guide
 
+> 中文版见 [DEVELOPERS.zh-CN.md](DEVELOPERS.zh-CN.md)。
+
 Internal/architecture docs for people hacking on `bounty-finder`. For usage,
 see [README.md](README.md).
 
