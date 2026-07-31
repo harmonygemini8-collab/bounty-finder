@@ -86,7 +86,6 @@ class GitHubSource:
     ) -> list[Bounty]:
         label_queries = list(label_queries or DEFAULT_LABEL_QUERIES)
         seen: dict[str, Bounty] = {}
-        lang_cache: dict[str, Optional[str]] = {}
 
         for lq in label_queries:
             q = f"{lq} is:issue is:open {extra_qualifiers}".strip()
@@ -114,10 +113,46 @@ class GitHubSource:
 
         bounties = list(seen.values())
         if fetch_language:
+            meta_cache: dict[str, tuple] = {}
             for b in bounties:
-                if b.repo not in lang_cache:
-                    lang_cache[b.repo] = self._repo_language(b.repo)
-                b.language = lang_cache[b.repo]
+                if b.repo not in meta_cache:
+                    meta_cache[b.repo] = self._repo_meta(b.repo)
+                b.language, b.stars = meta_cache[b.repo]
+        return bounties
+
+    def search_orgs(
+        self,
+        orgs: Iterable[str],
+        label_queries: Optional[Iterable[str]] = None,
+        max_results: int = 100,
+        fetch_language: bool = True,
+    ) -> list[Bounty]:
+        """Discover bounties scoped to a set of orgs/users (curated seed list)."""
+
+        # GitHub caps a single query's length/qualifiers, so batch orgs in groups.
+        orgs = list(orgs)
+        chunk = 5
+        collected: dict[str, Bounty] = {}
+        for i in range(0, len(orgs), chunk):
+            group = orgs[i : i + chunk]
+            org_q = " ".join(
+                f"repo:{o}" if "/" in o else f"user:{o}" for o in group
+            )
+            found = self.search(
+                label_queries=label_queries,
+                extra_qualifiers=org_q,
+                max_results=max_results,
+                fetch_language=False,
+            )
+            for b in found:
+                collected[f"{b.repo}#{b.number}"] = b
+        bounties = list(collected.values())
+        if fetch_language:
+            meta_cache: dict[str, tuple] = {}
+            for b in bounties:
+                if b.repo not in meta_cache:
+                    meta_cache[b.repo] = self._repo_meta(b.repo)
+                b.language, b.stars = meta_cache[b.repo]
         return bounties
 
     # -- helpers -------------------------------------------------------------
@@ -147,12 +182,14 @@ class GitHubSource:
             body=body,
         )
 
-    def _repo_language(self, repo: str) -> Optional[str]:
+    def _repo_meta(self, repo: str) -> tuple:
+        """Return ``(language, stars)`` for a repo (both may be None on error)."""
+
         try:
             data = self._get(f"/repos/{repo}")
-            return data.get("language")
+            return data.get("language"), data.get("stargazers_count")
         except requests.HTTPError:
-            return None
+            return None, None
 
     def enrich_amount_from_comments(self, bounty: Bounty, max_comments: int = 100) -> None:
         """Refine the bounty amount by scanning bot comments (BountyHub/Algora).

@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from .models import Bounty
+from .parsing import best_amount
 from .sources.github import GitHubSource
 
 # Escrow-backed bounty platforms: a link to one of these is a strong signal the
@@ -56,6 +57,7 @@ class Analysis:
     openness: float = 0.0  # 1 = wide open, 0 = crowded/taken
     finishability: float = 0.0
     maintainer: float = 0.0
+    effort: str = "Unknown"  # Small / Medium / Large / Unknown
     platforms: list[str] = field(default_factory=list)
     reasons: list[str] = field(default_factory=list)
     red_flags: list[str] = field(default_factory=list)
@@ -98,6 +100,11 @@ class DeepAnalyzer:
             [bounty.title, bounty.body] + [c.get("body") or "" for c in comments]
         )
         a.platforms = _detect_platforms(text_blob)
+
+        # Backfill a missing amount from bot/maintainer comments (Algora,
+        # BountyHub bots post the dollar figure in the thread).
+        if not bounty.amount_usd:
+            bounty.amount_usd = best_amount(text_blob)
 
         self._legitimacy(a, repo)
         self._openness(a, comments, prs)
@@ -205,6 +212,19 @@ class DeepAnalyzer:
         if len(b.body or "") > 6000:
             score -= 0.15
         a.finishability = max(0.0, min(1.0, score))
+
+        # Coarse effort bucket for the report.
+        big = labels & {"epic", "research", "rfc"} or (
+            "enhancement" in labels and len(b.body) > 2500
+        )
+        if big:
+            a.effort = "Large"
+        elif labels & {"good first issue", "good-first-issue", "easy", "documentation"}:
+            a.effort = "Small"
+        elif labels & {"bug"}:
+            a.effort = "Small-Medium"
+        else:
+            a.effort = "Medium"
 
     def _maintainer(self, a: Analysis, repo: dict, comments: list[dict]) -> None:
         score = 0.4

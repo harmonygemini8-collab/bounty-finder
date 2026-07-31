@@ -19,6 +19,7 @@ class Bounty:
     amount_usd: float  # best-effort parsed bounty amount; 0.0 if unknown
     labels: list[str] = field(default_factory=list)
     language: Optional[str] = None  # primary repo language, when known
+    stars: Optional[int] = None  # repo stargazers, when known
     state: str = "open"
     comments: int = 0
     reactions: int = 0

@@ -37,6 +37,9 @@ GitHub's low unauthenticated search rate.
 ## Usage
 
 ```bash
+# Curated crawl: only high-star OSS projects that actually pay, deep-analyzed
+bounty-finder --curated --min-stars 500 --deep 15 --format markdown -o report.md
+
 # Top 15 bounties across GitHub, refined for the top 10
 bounty-finder
 
@@ -101,6 +104,16 @@ configurable weights (`--w-*`):
 | stack | matches `--lang`? | 0.05 |
 
 See `bounty_finder/scoring.py` for the exact formulas.
+
+## Curated high-star discovery (`--curated`)
+
+A naive `label:bounty` search is dominated by low-star "bounty farms".
+`--curated` instead scopes discovery to a seed list of established, high-star
+OSS projects known to pay bounties through Algora/Polar (cal.com, coolify,
+twenty, activepieces, highlight, microG, …; see `bounty_finder/seeds.py`).
+Combine with `--min-stars N` to drop anything below a popularity threshold and
+`--deep` to get verdicts. This is the recommended way to find issues actually
+worth your time.
 
 ## Data sources
 

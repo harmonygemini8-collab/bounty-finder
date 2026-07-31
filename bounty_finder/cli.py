@@ -15,6 +15,7 @@ from .report import (
     to_markdown,
 )
 from .scoring import ScoreConfig, ScoreWeights, rank
+from .seeds import CURATED_LABELS, CURATED_ORGS
 from .sources.algora import AlgoraSource
 from .sources.github import DEFAULT_LABEL_QUERIES, GitHubSource
 
@@ -30,6 +31,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--min-amount", type=float, default=0.0,
         help="Only include bounties >= this USD amount (default: 0).",
+    )
+    p.add_argument(
+        "--curated", action="store_true",
+        help="Only search a seed list of high-star OSS projects known to pay "
+             "bounties (skips the noisy generic label search).",
+    )
+    p.add_argument(
+        "--min-stars", type=int, default=0,
+        help="Drop bounties whose repo has fewer than this many stars.",
     )
     p.add_argument(
         "--lang", action="append", default=[], metavar="LANGUAGE",
@@ -104,15 +114,26 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
 
-    bounties = gh.search(
-        label_queries=args.label or None,
-        extra_qualifiers=args.qualifiers,
-        max_results=args.max_fetch,
-        fetch_language=not args.no_language,
-    )
+    if args.curated:
+        bounties = gh.search_orgs(
+            orgs=CURATED_ORGS,
+            label_queries=args.label or CURATED_LABELS,
+            max_results=args.max_fetch,
+            fetch_language=True,  # need stars for high-star filtering
+        )
+    else:
+        bounties = gh.search(
+            label_queries=args.label or None,
+            extra_qualifiers=args.qualifiers,
+            max_results=args.max_fetch,
+            fetch_language=not args.no_language,
+        )
 
     if args.algora_org:
         bounties += AlgoraSource().search(org=args.algora_org)
+
+    if args.min_stars > 0:
+        bounties = [b for b in bounties if (b.stars or 0) >= args.min_stars]
 
     config = ScoreConfig(weights=_weights(args), preferred_languages=args.lang)
     ranked = rank(bounties, config)

@@ -103,9 +103,11 @@ def analyses_to_console(analyses, top: int) -> str:
         )
         out.append(f"   {b.title}")
         out.append(f"   {b.url}")
+        stars = f"{b.stars:,}★" if b.stars is not None else "?★"
         out.append(
-            f"   legit={a.legitimacy:.2f} open={a.openness:.2f} "
-            f"finishable={a.finishability:.2f} maintainer={a.maintainer:.2f}"
+            f"   {stars}  effort={a.effort}  legit={a.legitimacy:.2f} "
+            f"open={a.openness:.2f} finishable={a.finishability:.2f} "
+            f"maintainer={a.maintainer:.2f}"
         )
         for r in a.reasons:
             out.append(f"   + {r}")
@@ -139,9 +141,13 @@ def analyses_to_markdown(analyses, top: int) -> str:
         b = a.bounty
         icon = _VERDICT_ICON.get(a.verdict, "")
         platforms = ", ".join(a.platforms) if a.platforms else "none detected"
+        stars = f"{b.stars:,}★" if b.stars is not None else "?★"
         out.append(f"### {i}. {icon} {a.verdict} — [{b.repo}#{b.number}]({b.url})")
         out.append("")
-        out.append(f"**{_escape(b.title)}** · {_fmt_amount(b.amount_usd)} · platform: {platforms}")
+        out.append(
+            f"**{_escape(b.title)}** · {_fmt_amount(b.amount_usd)} · {stars} · "
+            f"effort: {a.effort} · platform: {platforms}"
+        )
         out.append("")
         if a.reasons:
             out.append("**Reasons to do it**")

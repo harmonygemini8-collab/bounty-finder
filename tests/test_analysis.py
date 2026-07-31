@@ -81,6 +81,14 @@ def test_assignee_reduces_openness():
     assert free.openness > taken.openness
 
 
+def test_effort_bucket_from_labels():
+    gh = FakeGH(repo={"stars": 800, "pushed_at": datetime.now(timezone.utc)})
+    small = DeepAnalyzer(gh).analyze(_bounty(labels=["good first issue"]))
+    large = DeepAnalyzer(gh).analyze(_bounty(labels=["epic"]))
+    assert small.effort == "Small"
+    assert large.effort == "Large"
+
+
 def test_claim_comments_reduce_openness():
     claims = [{"user": {"login": f"u{i}"}, "body": "I'd like to work on this"} for i in range(3)]
     gh = FakeGH(repo={"stars": 800, "pushed_at": datetime.now(timezone.utc)}, comments=claims)
