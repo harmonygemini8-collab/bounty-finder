@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bounty-finder"
+version = "0.1.0"
+description = "Read-only assistant that discovers and ranks open GitHub/Algora bounty issues."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = ["requests>=2.28"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "ruff>=0.4"]
+
+[project.scripts]
+bounty-finder = "bounty_finder.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["bounty_finder*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "B", "UP", "DTZ"]
+ignore = ["UP045", "UP007"]  # keep Optional[...] for readability

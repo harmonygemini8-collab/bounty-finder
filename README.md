@@ -1,0 +1,97 @@
+# bounty-finder
+
+A **read-only** assistant that discovers open bounty-bearing GitHub issues,
+scores them by expected value for a bounty hunter, and prints a ranked
+shortlist you can act on.
+
+> **This tool does not comment, claim, assign, or open pull requests.**
+> It only reads public data. Claiming a bounty and talking to maintainers is
+> something you do yourself, as a real person — mass-automating those steps
+> gets accounts banned and PRs rejected, and it is *not* how bounties actually
+> pay out. The money comes from genuinely solving a well-scoped issue.
+
+## Why
+
+Bounty boards are noisy. The highest-dollar issues (e.g. a decade-old
+"WearOS support" mega-feature) are usually the *worst* use of your time:
+huge scope, many competitors, low odds of a payout. This tool surfaces issues
+that are actually **finishable and winnable** by weighing reward against
+tractability, competition, freshness, and how well the repo matches your stack.
+
+## Install
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -e .
+```
+
+`requests` is the only runtime dependency.
+
+## Authentication
+
+Uses a GitHub token for a usable rate limit. It is picked up automatically from
+`GITHUB_TOKEN` / `GH_TOKEN`, or from the `gh` CLI (`gh auth token`) if you have
+[`gh`](https://cli.github.com/) logged in. Without a token you are limited to
+GitHub's low unauthenticated search rate.
+
+## Usage
+
+```bash
+# Top 15 bounties across GitHub, refined for the top 10
+bounty-finder
+
+# Only Python bounties worth >= $100, as a markdown report
+bounty-finder --lang Python --min-amount 100 --format markdown -o shortlist.md
+
+# Bias toward small, finishable tasks and away from crowded ones
+bounty-finder --w-tractability 0.4 --w-competition 0.3 --w-reward 0.2
+
+# Restrict with raw GitHub search qualifiers
+bounty-finder --qualifiers "language:Go -label:wontfix created:>2025-01-01"
+```
+
+Run `bounty-finder --help` for all flags.
+
+### Output
+
+`console` (default), `markdown`, or `json` via `--format`. The competition
+column flags issues as `open` / `busy` / `HOT (crowded)` based on assignees,
+linked PRs, and comment volume.
+
+## How scoring works
+
+Each issue gets a 0–100 score combining five normalized components with
+configurable weights (`--w-*`):
+
+| Component | Meaning | Default weight |
+|-----------|---------|---------------:|
+| reward | bounty size (log-scaled, capped) | 0.40 |
+| tractability | finishable? (labels + body length) | 0.25 |
+| competition | is anyone already on it? | 0.20 |
+| activity | recently active? | 0.10 |
+| stack | matches `--lang`? | 0.05 |
+
+See `bounty_finder/scoring.py` for the exact formulas.
+
+## Data sources
+
+- **GitHub** (primary, reliable): REST search API over bounty labels, plus
+  amount refinement from BountyHub/Algora bot comments and a linked-PR
+  competition probe for the shortlist.
+- **Algora** (best-effort, optional via `--algora-org`): Algora has no stable
+  public bounty API, so this source degrades gracefully to empty when the
+  undocumented endpoint changes.
+
+## Ethics
+
+This is a decision aid. Use it to find issues worth your time, then engage
+honestly: read the issue, confirm the approach with the maintainer, and only
+claim what you will actually deliver.
+
+## Development
+
+```bash
+pip install -e ".[dev]"
+pytest -q
+ruff check .
+```
