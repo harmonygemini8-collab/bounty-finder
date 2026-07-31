@@ -141,6 +141,7 @@ def main(argv: list[str] | None = None) -> int:
             extra_qualifiers=args.qualifiers,
             max_results=args.max_fetch,
             fetch_language=not args.no_language,
+            sort="created" if args.sort == "fresh" else "updated",
         )
 
     if args.algora_org:

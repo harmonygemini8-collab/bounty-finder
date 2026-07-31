@@ -83,6 +83,7 @@ class GitHubSource:
         extra_qualifiers: str = "",
         max_results: int = 60,
         fetch_language: bool = True,
+        sort: str = "updated",
     ) -> list[Bounty]:
         label_queries = list(label_queries or DEFAULT_LABEL_QUERIES)
         seen: dict[str, Bounty] = {}
@@ -93,7 +94,8 @@ class GitHubSource:
             while len(seen) < max_results:
                 data = self._get(
                     "/search/issues",
-                    {"q": q, "per_page": 50, "page": page, "sort": "updated"},
+                    {"q": q, "per_page": 50, "page": page, "sort": sort,
+                     "order": "desc"},
                 )
                 items = data.get("items", [])
                 if not items:
